@@ -53,16 +53,20 @@ body {
 .chat-container {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    min-height: 100vh;
+    height: 100dvh; /* Dynamic viewport height for mobile */
+    width: 100%;
     max-width: 600px;
     margin: 0 auto;
-    border: 1px solid #ccc;
     background-color: #ffffff;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    overflow: hidden;
 }
 
 .chat-header {
+    flex-shrink: 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -72,6 +76,7 @@ body {
     font-size: 18px;
     font-weight: bold;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    z-index: 1;
 }
 
 .chat-messages {
@@ -79,8 +84,8 @@ body {
     padding: 10px;
     overflow-y: auto;
     background-color: #e5ddd5;
-    height: calc(100vh - 120px); /* Adjust for header and input area */
-    max-height: calc(100vh - 120px);
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 70px; /* Space for input */
 }
 
 .message {
@@ -89,6 +94,21 @@ body {
     border-radius: 8px;
     max-width: 70%;
     word-wrap: break-word;
+    position: relative;
+    touch-action: pan-x;
+    transition: transform 0.2s ease;
+}
+
+.message:active {
+    transform: translateX(-20px);
+}
+
+/* Add touch feedback */
+@media (hover: none) {
+    .message {
+        user-select: none;
+        -webkit-user-select: none;
+    }
 }
 
 .message strong {
@@ -116,12 +136,96 @@ body {
     text-align: left;
 }
 
+.message-status {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-size: 11px;
+    color: #999;
+    margin-top: 4px;
+}
+
+.seen-status {
+    font-size: 10px;
+    color: #34B7F1;
+    margin-top: 2px;
+}
+
+.message.self .message-status {
+    align-items: flex-end;
+}
+
+.message.other .message-status {
+    align-items: flex-start;
+}
+
+.reply-content {
+    background: rgba(0, 0, 0, 0.05);
+    padding: 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    font-size: 0.9em;
+}
+
+.reply-content span {
+    color: #075e54;
+    font-weight: 500;
+    font-size: 0.8em;
+}
+
+.reply-content p {
+    margin: 4px 0 0;
+    opacity: 0.8;
+}
+
+.reply-bar {
+    background: #f0f0f0;
+    padding: 8px 12px;
+    border-top: 1px solid #ddd;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.reply-info {
+    flex: 1;
+}
+
+.reply-info span {
+    color: #075e54;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+.reply-info p {
+    margin: 2px 0;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.reply-bar button {
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
 .chat-input {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 600px;
+    background-color: #f0f0f0;
+    padding: 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    border-top: 1px solid #ccc;
     display: flex;
     align-items: center;
-    padding: 10px;
-    background-color: #f0f0f0;
-    border-top: 1px solid #ccc;
 }
 
 .chat-input input[type="text"] {
@@ -131,7 +235,9 @@ body {
     border: 1px solid #ccc;
     border-radius: 20px;
     outline: none;
-    font-size: 14px;
+    font-size: 16px; /* Prevent zoom on iOS */
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 .chat-input input[type="file"] {
@@ -172,4 +278,22 @@ body {
 .clear-button:hover {
     transform: scale(1.1);
     background: none;
+}
+
+/* Add mobile-specific adjustments */
+@media (max-width: 768px) {
+    .chat-container {
+        border: none;
+        box-shadow: none;
+    }
+
+    .message {
+        max-width: 85%;
+        margin-right: 35px;
+    }
+
+    .chat-input input[type="text"] {
+        height: 40px;
+        font-size: 16px;
+    }
 }

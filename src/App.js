@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 import './App.css';
 
@@ -16,29 +16,12 @@ function App() {
     const [message, setMessage] = useState('');
     const [messages, setMessages] = useState([]);
     const [image, setImage] = useState(null);
-    const [notificationPermission, setNotificationPermission] = useState(false);
-    const [notificationEnabled, setNotificationEnabled] = useState(false);
-
-    const requestNotificationPermission = async () => {
-        try {
-            if (!('Notification' in window)) {
-                alert('This browser does not support notifications');
-                return;
-            }
-
-            const permission = await Notification.requestPermission();
-            setNotificationPermission(permission === 'granted');
-            setNotificationEnabled(permission === 'granted');
-            
-            if (permission === 'granted') {
-                new Notification('Notifications enabled!', {
-                    body: 'You will now receive notifications for new messages'
-                });
-            }
-        } catch (error) {
-            console.error('Error requesting notification permission:', error);
-        }
-    };
+    const [replyTo, setReplyTo] = useState(null);
+    const [touchStart, setTouchStart] = useState(null);
+    const [touchEnd, setTouchEnd] = useState(null);
+    const [seenMessages, setSeenMessages] = useState({});
+    const inputRef = useRef(null);
+    const minSwipeDistance = 50;
 
     useEffect(() => {
         // Load messages from localStorage on startup
@@ -62,28 +45,53 @@ function App() {
 
         // Listen for messages and show notification
         socket.on('receive-message', (data) => {
-            console.log('Received message:', data);
-            setMessages((prev) => {
+            setMessages(prev => {
                 const newMessages = [...prev, data];
                 localStorage.setItem('chatMessages', JSON.stringify(newMessages));
+                
+                // Show mobile notification for new messages
+                if (data.name !== name && 'vibrate' in navigator) {
+                    // Vibrate for 200ms
+                    navigator.vibrate(200);
+                    
+                    // Play notification sound
+                    const audio = new Audio('data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjIwLjEwMAAAAAAAAAAAAAAA//tUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAAFbgC1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjM1AAAAAAAAAAAAAAAAJAYAAAAAAAAABa7hf+NWwAAAAAAAAAAAAAAAAAAAAP/7kGQAD/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ==');
+                    audio.play().catch(console.error);
+                    
+                    // Try to use system notification if supported
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification(data.name, {
+                            body: data.message || 'Sent an image',
+                            silent: true // Don't play system sound
+                        });
+                    }
+                }
+                
                 return newMessages;
             });
-
-            // Show notification if the message is from someone else and the window is not focused
-            if (data.name !== name && document.hidden && notificationPermission) {
-                const notification = new Notification('New Message from ' + data.name, {
-                    body: data.message || 'Sent an image',
-                    icon: '/notification-icon.png' // You can add an icon in the public folder
-                });
-
-                // Play notification sound
-                const audio = new Audio('/notification-sound.mp3'); // Add this file to public folder
-                audio.play().catch(e => console.log('Audio play failed:', e));
-
-                // Close notification after 5 seconds
-                setTimeout(() => notification.close(), 5000);
-            }
         });
+
+        socket.on('message-seen', ({ messageId, seenAt, seenBy }) => {
+            setSeenMessages(prev => ({
+                ...prev,
+                [messageId]: { ...prev[messageId], [seenBy]: seenAt }
+            }));
+        });
+
+        // Update when window gains focus
+        const handleFocus = () => {
+            messages.forEach(msg => {
+                if (msg.name !== name) {
+                    socket.emit('mark-seen', {
+                        messageId: msg.timestamp,
+                        seenBy: name,
+                        seenAt: new Date().toISOString()
+                    });
+                }
+            });
+        };
+
+        window.addEventListener('focus', handleFocus);
 
         // Remove chat-history listener as we're using localStorage
 
@@ -94,12 +102,14 @@ function App() {
         });
 
         return () => {
+            window.removeEventListener('focus', handleFocus);
             socket.off('connect');
             socket.off('connect_error');
             socket.off('receive-message');
             socket.off('chat-cleared');
+            socket.off('message-seen');
         };
-    }, [name, notificationPermission]);
+    }, [messages, name]);
 
     const convertImageToBase64 = (file) => {
         return new Promise((resolve, reject) => {
@@ -122,19 +132,55 @@ function App() {
         }
     };
 
-    const sendMessage = () => {
+    const handleReply = (msg) => {
+        setReplyTo(msg);
+        inputRef.current?.focus();
+    };
+
+    const onTouchStart = (e) => {
+        setTouchEnd(null);
+        setTouchStart(e.touches[0].clientX);
+    };
+
+    const onTouchMove = (e) => {
+        setTouchEnd(e.touches[0].clientX);
+    };
+
+    const onTouchEnd = useCallback((msg) => {
+        if (!touchStart || !touchEnd) return;
+        
+        const distance = touchStart - touchEnd;
+        const isLeftSwipe = distance > minSwipeDistance;
+        
+        if (isLeftSwipe) {
+            handleReply(msg);
+        }
+        
+        setTouchStart(null);
+        setTouchEnd(null);
+    }, [touchStart, touchEnd]);
+
+    const sendMessage = (e) => {
+        e?.preventDefault(); // Prevent any default form behavior
         if (message.trim() || image) {
             const messageData = {
+                id: new Date().toISOString(), // Add unique ID
                 name,
                 message: message.trim(),
                 image,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                replyTo: replyTo // Add reply data
             };
             
             socket.emit('send-message', messageData);
-            // Removed the local message addition
             setMessage('');
             setImage(null);
+            setReplyTo(null); // Clear reply
+            
+            // Keep focus and prevent keyboard dismiss
+            if (inputRef.current) {
+                inputRef.current.focus();
+            }
         }
     };
 
@@ -148,38 +194,61 @@ function App() {
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
+    const formatSeenTime = (timestamp) => {
+        if (!timestamp) return '';
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
     return (
         <div className="chat-container">
             <div className="chat-header">
                 <h2>Chat App</h2>
-                <div className="header-buttons">
-                    <button 
-                        className="notification-button" 
-                        onClick={requestNotificationPermission}
-                        title={notificationEnabled ? "Notifications enabled" : "Enable notifications"}
-                    >
-                        {notificationEnabled ? '🔔' : '🔕'}
-                    </button>
-                    <button className="clear-button" onClick={clearChat}>
-                        🗑️
-                    </button>
-                </div>
+                <button className="clear-button" onClick={clearChat}>
+                    🗑️
+                </button>
             </div>
             <div className="chat-messages">
                 {messages.map((msg, index) => (
                     <div
                         key={index}
                         className={`message ${msg.name === name ? 'self' : 'other'}`}
+                        onTouchStart={onTouchStart}
+                        onTouchMove={onTouchMove}
+                        onTouchEnd={() => onTouchEnd(msg)}
                     >
                         <strong>{msg.name}</strong>
+                        {msg.replyTo && (
+                            <div className="reply-content">
+                                <span>Replying to {msg.replyTo.name}</span>
+                                <p>{msg.replyTo.message}</p>
+                            </div>
+                        )}
                         {msg.message && <p>{msg.message}</p>}
                         {msg.image && <img src={msg.image} alt="sent" />}
-                        <span className="message-time">{formatTime(msg.timestamp)}</span>
+                        <div className="message-status">
+                            <span className="message-time">{formatTime(msg.timestamp)}</span>
+                            {msg.name === name && seenMessages[msg.id] && (
+                                <span className="seen-status">
+                                    Seen {formatSeenTime(Object.values(seenMessages[msg.id])[0])}
+                                </span>
+                            )}
+                        </div>
                     </div>
                 ))}
             </div>
-            <div className="chat-input">
+            {replyTo && (
+                <div className="reply-bar">
+                    <div className="reply-info">
+                        <span>Replying to {replyTo.name}</span>
+                        <p>{replyTo.message}</p>
+                    </div>
+                    <button onClick={() => setReplyTo(null)}>✕</button>
+                </div>
+            )}
+            <form className="chat-input" onSubmit={sendMessage}>
                 <input
+                    ref={inputRef}
                     type="text"
                     placeholder="Type a message"
                     value={message}
@@ -192,8 +261,8 @@ function App() {
                     accept="image/*"
                     onChange={handleImageUpload}
                 />
-                <button onClick={sendMessage}>Send</button>
-            </div>
+                <button type="submit">Send</button>
+            </form>
         </div>
     );
 }

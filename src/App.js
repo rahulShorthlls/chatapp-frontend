@@ -16,12 +16,29 @@ function App() {
     const [message, setMessage] = useState('');
     const [messages, setMessages] = useState([]);
     const [image, setImage] = useState(null);
-    const [replyTo, setReplyTo] = useState(null);
-    const [touchStart, setTouchStart] = useState(null);
-    const [touchEnd, setTouchEnd] = useState(null);
-    const [seenMessages, setSeenMessages] = useState({});
-    const inputRef = useRef(null);
-    const minSwipeDistance = 50;
+    const [notificationPermission, setNotificationPermission] = useState(false);
+    const [notificationEnabled, setNotificationEnabled] = useState(false);
+
+    const requestNotificationPermission = async () => {
+        try {
+            if (!('Notification' in window)) {
+                alert('This browser does not support notifications');
+                return;
+            }
+
+            const permission = await Notification.requestPermission();
+            setNotificationPermission(permission === 'granted');
+            setNotificationEnabled(permission === 'granted');
+            
+            if (permission === 'granted') {
+                new Notification('Notifications enabled!', {
+                    body: 'You will now receive notifications for new messages'
+                });
+            }
+        } catch (error) {
+            console.error('Error requesting notification permission:', error);
+        }
+    };
 
     useEffect(() => {
         // Load messages from localStorage on startup
@@ -43,7 +60,7 @@ function App() {
             console.error('Connection Error:', error);
         });
 
-        // Listen for messages and show notification
+        // Listen for messages
         socket.on('receive-message', (data) => {
             setMessages(prev => {
                 const newMessages = [...prev, data];
@@ -69,29 +86,22 @@ function App() {
                 
                 return newMessages;
             });
+
+            // Show notification if the message is from someone else and the window is not focused
+            if (data.name !== name && document.hidden && notificationPermission) {
+                const notification = new Notification('New Message from ' + data.name, {
+                    body: data.message || 'Sent an image',
+                    icon: '/notification-icon.png' // You can add an icon in the public folder
+                });
+
+                // Play notification sound
+                const audio = new Audio('/notification-sound.mp3'); // Add this file to public folder
+                audio.play().catch(e => console.log('Audio play failed:', e));
+
+                // Close notification after 5 seconds
+                setTimeout(() => notification.close(), 5000);
+            }
         });
-
-        socket.on('message-seen', ({ messageId, seenAt, seenBy }) => {
-            setSeenMessages(prev => ({
-                ...prev,
-                [messageId]: { ...prev[messageId], [seenBy]: seenAt }
-            }));
-        });
-
-        // Update when window gains focus
-        const handleFocus = () => {
-            messages.forEach(msg => {
-                if (msg.name !== name) {
-                    socket.emit('mark-seen', {
-                        messageId: msg.timestamp,
-                        seenBy: name,
-                        seenAt: new Date().toISOString()
-                    });
-                }
-            });
-        };
-
-        window.addEventListener('focus', handleFocus);
 
         // Remove chat-history listener as we're using localStorage
 
@@ -109,7 +119,7 @@ function App() {
             socket.off('chat-cleared');
             socket.off('message-seen');
         };
-    }, [messages, name]);
+    }, [name, notificationPermission]);
 
     const convertImageToBase64 = (file) => {
         return new Promise((resolve, reject) => {
@@ -130,6 +140,10 @@ function App() {
                 console.error('Error converting image:', error);
             }
         }
+    };
+
+    const handleReply = (msg) => {
+        setReplyTo(msg);
     };
 
     const handleReply = (msg) => {
@@ -168,19 +182,12 @@ function App() {
                 name,
                 message: message.trim(),
                 image,
-                timestamp: new Date().toISOString(),
-                replyTo: replyTo // Add reply data
+                timestamp: new Date().toISOString()
             };
             
             socket.emit('send-message', messageData);
             setMessage('');
             setImage(null);
-            setReplyTo(null); // Clear reply
-            
-            // Keep focus and prevent keyboard dismiss
-            if (inputRef.current) {
-                inputRef.current.focus();
-            }
         }
     };
 
@@ -204,18 +211,24 @@ function App() {
         <div className="chat-container">
             <div className="chat-header">
                 <h2>Chat App</h2>
-                <button className="clear-button" onClick={clearChat}>
-                    🗑️
-                </button>
+                <div className="header-buttons">
+                    <button 
+                        className="notification-button" 
+                        onClick={requestNotificationPermission}
+                        title={notificationEnabled ? "Notifications enabled" : "Enable notifications"}
+                    >
+                        {notificationEnabled ? '🔔' : '🔕'}
+                    </button>
+                    <button className="clear-button" onClick={clearChat}>
+                        🗑️
+                    </button>
+                </div>
             </div>
             <div className="chat-messages">
                 {messages.map((msg, index) => (
                     <div
                         key={index}
                         className={`message ${msg.name === name ? 'self' : 'other'}`}
-                        onTouchStart={onTouchStart}
-                        onTouchMove={onTouchMove}
-                        onTouchEnd={() => onTouchEnd(msg)}
                     >
                         <strong>{msg.name}</strong>
                         {msg.replyTo && (
@@ -237,16 +250,7 @@ function App() {
                     </div>
                 ))}
             </div>
-            {replyTo && (
-                <div className="reply-bar">
-                    <div className="reply-info">
-                        <span>Replying to {replyTo.name}</span>
-                        <p>{replyTo.message}</p>
-                    </div>
-                    <button onClick={() => setReplyTo(null)}>✕</button>
-                </div>
-            )}
-            <form className="chat-input" onSubmit={sendMessage}>
+            <div className="chat-input">
                 <input
                     ref={inputRef}
                     type="text"

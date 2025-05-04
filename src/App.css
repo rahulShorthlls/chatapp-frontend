@@ -53,6 +53,7 @@ body {
 .chat-container {
     display: flex;
     flex-direction: column;
+<<<<<<< HEAD
     height: 100dvh; /* Dynamic viewport height for mobile */
     width: 100%;
     max-width: 600px;
@@ -77,20 +78,42 @@ body {
     font-weight: bold;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     z-index: 1;
+=======
+    height: 100vh;
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    background-color: #e5ddd5;
+}
+
+.chat-header {
+    padding: 10px 16px;
+    background-color: #075e54;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    z-index: 1000;
+>>>>>>> old-state
 }
 
 .chat-messages {
     flex: 1;
-    padding: 10px;
     overflow-y: auto;
+<<<<<<< HEAD
     background-color: #e5ddd5;
     -webkit-overflow-scrolling: touch;
     padding-bottom: 70px; /* Space for input */
+=======
+    padding: 16px;
+    background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAADSSURBVDhPY2QgB/z//18ZiOWBWAKIBYFYAIjZoOL4AchkBSAWAmJ+IJYGYh4g5gRiKB8XYARiGSAGKRYAYk6oHAhwQPFgAUJARhyIQeaDQgDmGxgfhBmh7FAQS4LAByAGBRnIZzBgCcRQMBqGJAPyMhALA7EIFA8WwEDIywLQaEcBdiBmh+LBAhjweTkdiEH5lQWI2aDiYAAy2QSIQf7hBGIOqDgYgEwWAmIuIGYHYk4oBgUXCIDMFQFiUJpkB2IOIAb5FwYYGRlDgVgNiA2AWAOA0KlzfsocP64AAAAASUVORK5CYII=");
+>>>>>>> old-state
 }
 
 .message {
-    margin-bottom: 10px;
+    max-width: 75%;
     padding: 8px 12px;
+<<<<<<< HEAD
     border-radius: 8px;
     max-width: 70%;
     word-wrap: break-word;
@@ -109,6 +132,12 @@ body {
         user-select: none;
         -webkit-user-select: none;
     }
+=======
+    margin: 4px 0;
+    border-radius: 7.5px;
+    position: relative;
+    box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
+>>>>>>> old-state
 }
 
 .message strong {
@@ -126,16 +155,19 @@ body {
 
 .message.self {
     background-color: #dcf8c6;
-    align-self: flex-end;
+    margin-left: auto;
+    border-top-right-radius: 0;
     text-align: right;
 }
 
 .message.other {
     background-color: #ffffff;
-    align-self: flex-start;
+    margin-right: auto;
+    border-top-left-radius: 0;
     text-align: left;
 }
 
+<<<<<<< HEAD
 .message-status {
     display: flex;
     flex-direction: column;
@@ -193,10 +225,23 @@ body {
 
 .reply-info span {
     color: #075e54;
+=======
+.reply-content {
+    background: rgba(0,0,0,0.05);
+    padding: 8px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    border-left: 4px solid #25d366;
+}
+
+.reply-content span {
+    color: #25d366;
+>>>>>>> old-state
     font-size: 0.8em;
     font-weight: 500;
 }
 
+<<<<<<< HEAD
 .reply-info p {
     margin: 2px 0;
     opacity: 0.8;
@@ -226,18 +271,32 @@ body {
     border-top: 1px solid #ccc;
     display: flex;
     align-items: center;
+=======
+.chat-input {
+    background: #f0f0f0;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-top: 1px solid rgba(0,0,0,0.1);
+>>>>>>> old-state
 }
 
 .chat-input input[type="text"] {
     flex: 1;
-    padding: 10px;
-    margin-right: 10px;
-    border: 1px solid #ccc;
+    padding: 9px 12px;
     border-radius: 20px;
+<<<<<<< HEAD
     outline: none;
     font-size: 16px; /* Prevent zoom on iOS */
     -webkit-user-select: text;
     user-select: text;
+=======
+    border: none;
+    background: white;
+    font-size: 15px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+>>>>>>> old-state
 }
 
 .chat-input input[type="file"] {

@@ -16,6 +16,29 @@ function App() {
     const [message, setMessage] = useState('');
     const [messages, setMessages] = useState([]);
     const [image, setImage] = useState(null);
+    const [notificationPermission, setNotificationPermission] = useState(false);
+    const [notificationEnabled, setNotificationEnabled] = useState(false);
+
+    const requestNotificationPermission = async () => {
+        try {
+            if (!('Notification' in window)) {
+                alert('This browser does not support notifications');
+                return;
+            }
+
+            const permission = await Notification.requestPermission();
+            setNotificationPermission(permission === 'granted');
+            setNotificationEnabled(permission === 'granted');
+            
+            if (permission === 'granted') {
+                new Notification('Notifications enabled!', {
+                    body: 'You will now receive notifications for new messages'
+                });
+            }
+        } catch (error) {
+            console.error('Error requesting notification permission:', error);
+        }
+    };
 
     useEffect(() => {
         // Load messages from localStorage on startup
@@ -37,7 +60,7 @@ function App() {
             console.error('Connection Error:', error);
         });
 
-        // Listen for messages
+        // Listen for messages and show notification
         socket.on('receive-message', (data) => {
             console.log('Received message:', data);
             setMessages((prev) => {
@@ -45,6 +68,21 @@ function App() {
                 localStorage.setItem('chatMessages', JSON.stringify(newMessages));
                 return newMessages;
             });
+
+            // Show notification if the message is from someone else and the window is not focused
+            if (data.name !== name && document.hidden && notificationPermission) {
+                const notification = new Notification('New Message from ' + data.name, {
+                    body: data.message || 'Sent an image',
+                    icon: '/notification-icon.png' // You can add an icon in the public folder
+                });
+
+                // Play notification sound
+                const audio = new Audio('/notification-sound.mp3'); // Add this file to public folder
+                audio.play().catch(e => console.log('Audio play failed:', e));
+
+                // Close notification after 5 seconds
+                setTimeout(() => notification.close(), 5000);
+            }
         });
 
         // Remove chat-history listener as we're using localStorage
@@ -61,7 +99,7 @@ function App() {
             socket.off('receive-message');
             socket.off('chat-cleared');
         };
-    }, []);
+    }, [name, notificationPermission]);
 
     const convertImageToBase64 = (file) => {
         return new Promise((resolve, reject) => {
@@ -105,13 +143,27 @@ function App() {
         setMessages([]);
     };
 
+    const formatTime = (timestamp) => {
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
     return (
         <div className="chat-container">
             <div className="chat-header">
                 <h2>Chat App</h2>
-                <button className="clear-button" onClick={clearChat}>
-                    🗑️
-                </button>
+                <div className="header-buttons">
+                    <button 
+                        className="notification-button" 
+                        onClick={requestNotificationPermission}
+                        title={notificationEnabled ? "Notifications enabled" : "Enable notifications"}
+                    >
+                        {notificationEnabled ? '🔔' : '🔕'}
+                    </button>
+                    <button className="clear-button" onClick={clearChat}>
+                        🗑️
+                    </button>
+                </div>
             </div>
             <div className="chat-messages">
                 {messages.map((msg, index) => (
@@ -122,6 +174,7 @@ function App() {
                         <strong>{msg.name}</strong>
                         {msg.message && <p>{msg.message}</p>}
                         {msg.image && <img src={msg.image} alt="sent" />}
+                        <span className="message-time">{formatTime(msg.timestamp)}</span>
                     </div>
                 ))}
             </div>

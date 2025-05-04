@@ -16,29 +16,12 @@ function App() {
     const [message, setMessage] = useState('');
     const [messages, setMessages] = useState([]);
     const [image, setImage] = useState(null);
-    const [notificationPermission, setNotificationPermission] = useState(false);
-    const [notificationEnabled, setNotificationEnabled] = useState(false);
-
-    const requestNotificationPermission = async () => {
-        try {
-            if (!('Notification' in window)) {
-                alert('This browser does not support notifications');
-                return;
-            }
-
-            const permission = await Notification.requestPermission();
-            setNotificationPermission(permission === 'granted');
-            setNotificationEnabled(permission === 'granted');
-            
-            if (permission === 'granted') {
-                new Notification('Notifications enabled!', {
-                    body: 'You will now receive notifications for new messages'
-                });
-            }
-        } catch (error) {
-            console.error('Error requesting notification permission:', error);
-        }
-    };
+    const [replyTo, setReplyTo] = useState(null);
+    const [touchStart, setTouchStart] = useState(null);
+    const [touchEnd, setTouchEnd] = useState(null);
+    const [seenMessages, setSeenMessages] = useState({});
+    const inputRef = useRef(null);
+    const minSwipeDistance = 50;
 
     useEffect(() => {
         // Load messages from localStorage on startup
@@ -66,41 +49,13 @@ function App() {
                 const newMessages = [...prev, data];
                 localStorage.setItem('chatMessages', JSON.stringify(newMessages));
                 
-                // Show mobile notification for new messages
+                // Only show vibration for new messages from others
                 if (data.name !== name && 'vibrate' in navigator) {
-                    // Vibrate for 200ms
                     navigator.vibrate(200);
-                    
-                    // Play notification sound
-                    const audio = new Audio('data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjIwLjEwMAAAAAAAAAAAAAAA//tUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAAFbgC1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjM1AAAAAAAAAAAAAAAAJAYAAAAAAAAABa7hf+NWwAAAAAAAAAAAAAAAAAAAAP/7kGQAD/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ==');
-                    audio.play().catch(console.error);
-                    
-                    // Try to use system notification if supported
-                    if ('Notification' in window && Notification.permission === 'granted') {
-                        new Notification(data.name, {
-                            body: data.message || 'Sent an image',
-                            silent: true // Don't play system sound
-                        });
-                    }
                 }
                 
                 return newMessages;
             });
-
-            // Show notification if the message is from someone else and the window is not focused
-            if (data.name !== name && document.hidden && notificationPermission) {
-                const notification = new Notification('New Message from ' + data.name, {
-                    body: data.message || 'Sent an image',
-                    icon: '/notification-icon.png' // You can add an icon in the public folder
-                });
-
-                // Play notification sound
-                const audio = new Audio('/notification-sound.mp3'); // Add this file to public folder
-                audio.play().catch(e => console.log('Audio play failed:', e));
-
-                // Close notification after 5 seconds
-                setTimeout(() => notification.close(), 5000);
-            }
         });
 
         // Remove chat-history listener as we're using localStorage
@@ -112,14 +67,13 @@ function App() {
         });
 
         return () => {
-            window.removeEventListener('focus', handleFocus);
             socket.off('connect');
             socket.off('connect_error');
             socket.off('receive-message');
             socket.off('chat-cleared');
             socket.off('message-seen');
         };
-    }, [name, notificationPermission]);
+    }, [name]); // Only depend on name
 
     const convertImageToBase64 = (file) => {
         return new Promise((resolve, reject) => {
@@ -140,10 +94,6 @@ function App() {
                 console.error('Error converting image:', error);
             }
         }
-    };
-
-    const handleReply = (msg) => {
-        setReplyTo(msg);
     };
 
     const handleReply = (msg) => {
@@ -175,19 +125,22 @@ function App() {
     }, [touchStart, touchEnd]);
 
     const sendMessage = (e) => {
-        e?.preventDefault(); // Prevent any default form behavior
+        e?.preventDefault();
         if (message.trim() || image) {
             const messageData = {
-                id: new Date().toISOString(), // Add unique ID
+                id: new Date().toISOString(),
                 name,
                 message: message.trim(),
                 image,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                replyTo
             };
             
             socket.emit('send-message', messageData);
             setMessage('');
             setImage(null);
+            setReplyTo(null);
+            inputRef.current?.focus();
         }
     };
 
@@ -211,18 +164,7 @@ function App() {
         <div className="chat-container">
             <div className="chat-header">
                 <h2>Chat App</h2>
-                <div className="header-buttons">
-                    <button 
-                        className="notification-button" 
-                        onClick={requestNotificationPermission}
-                        title={notificationEnabled ? "Notifications enabled" : "Enable notifications"}
-                    >
-                        {notificationEnabled ? '🔔' : '🔕'}
-                    </button>
-                    <button className="clear-button" onClick={clearChat}>
-                        🗑️
-                    </button>
-                </div>
+                <button className="clear-button" onClick={clearChat}>🗑️</button>
             </div>
             <div className="chat-messages">
                 {messages.map((msg, index) => (
@@ -250,7 +192,7 @@ function App() {
                     </div>
                 ))}
             </div>
-            <div className="chat-input">
+            <form className="chat-input" onSubmit={sendMessage}>
                 <input
                     ref={inputRef}
                     type="text"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import './App.css';
 
@@ -16,113 +16,81 @@ function App() {
     const [message, setMessage] = useState('');
     const [messages, setMessages] = useState([]);
     const [image, setImage] = useState(null);
-    const [notificationEnabled, setNotificationEnabled] = useState(() => {
-        return localStorage.getItem('notificationEnabled') === 'true';
-    });
-    const messagesEndRef = useRef(null);
-
-    const showNotification = React.useCallback((title, body) => {
-        if (!('Notification' in window)) {
-            console.log('Notifications not supported');
-            return;
-        }
-
-        if (Notification.permission === 'granted' && notificationEnabled) {
-            try {
-                const notification = new Notification(title, {
-                    body,
-                    icon: '/favicon.ico',
-                    tag: 'chat-message',
-                    silent: false
-                });
-
-                notification.onclick = () => {
-                    window.focus();
-                    notification.close();
-                };
-
-                const audio = new Audio('https://notificationsounds.com/storage/sounds/file-sounds-1150-pristine.mp3');
-                audio.volume = 0.5;
-                audio.play().catch(console.error);
-
-            } catch (error) {
-                console.error('Notification failed:', error);
-            }
-        }
-    }, [notificationEnabled]);
+    const [notificationPermission, setNotificationPermission] = useState(false);
+    const [notificationEnabled, setNotificationEnabled] = useState(false);
 
     const requestNotificationPermission = async () => {
-        if (!('Notification' in window)) {
-            alert('This browser does not support notifications');
-            return;
-        }
-
         try {
-            const permission = await Notification.requestPermission();
-            const isEnabled = permission === 'granted';
-            setNotificationEnabled(isEnabled);
-            localStorage.setItem('notificationEnabled', isEnabled.toString());
+            if (!('Notification' in window)) {
+                alert('This browser does not support notifications');
+                return;
+            }
 
-            if (isEnabled) {
-                showNotification('Notifications Enabled', 'You will now receive chat notifications');
+            const permission = await Notification.requestPermission();
+            setNotificationPermission(permission === 'granted');
+            setNotificationEnabled(permission === 'granted');
+            
+            if (permission === 'granted') {
+                new Notification('Notifications enabled!', {
+                    body: 'You will now receive notifications for new messages'
+                });
             }
         } catch (error) {
-            console.error('Permission request failed:', error);
+            console.error('Error requesting notification permission:', error);
         }
     };
 
     useEffect(() => {
+        // Load messages from localStorage on startup
         const savedMessages = JSON.parse(localStorage.getItem('chatMessages') || '[]');
         setMessages(savedMessages);
 
-        const checkNotificationPermission = async () => {
-            if ('Notification' in window) {
-                const permission = await Notification.requestPermission();
-                const savedEnabled = localStorage.getItem('notificationEnabled') === 'true';
-                const isEnabled = permission === 'granted' && savedEnabled;
-                setNotificationEnabled(isEnabled);
-            }
-        };
-
-        checkNotificationPermission();
-
+        // Reconnect socket if disconnected
         socket.on('connect', () => {
             console.log('Connected to server successfully');
             const userName = localStorage.getItem('name') || prompt('Enter your name:');
-            if (!userName) return;
+            if (!userName) return; // Ensure a name is provided
             setName(userName);
             localStorage.setItem('name', userName);
             socket.emit('new-user', userName);
         });
 
+        // Add connection status logging
         socket.on('connect_error', (error) => {
             console.error('Connection Error:', error);
         });
 
+        // Listen for messages and show notification
         socket.on('receive-message', (data) => {
-            setMessages(prev => {
+            console.log('Received message:', data);
+            setMessages((prev) => {
                 const newMessages = [...prev, data];
                 localStorage.setItem('chatMessages', JSON.stringify(newMessages));
-                
-                if (data.name !== name && document.hidden) {
-                    showNotification(
-                        `New Message from ${data.name}`,
-                        data.message || 'Sent an image'
-                    );
-                }
-
-                // Scroll to bottom after message is added
-                setTimeout(() => {
-                    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-                }, 100);
-                
                 return newMessages;
             });
+
+            // Show notification if the message is from someone else and the window is not focused
+            if (data.name !== name && document.hidden && notificationPermission) {
+                const notification = new Notification('New Message from ' + data.name, {
+                    body: data.message || 'Sent an image',
+                    icon: '/notification-icon.png' // You can add an icon in the public folder
+                });
+
+                // Play notification sound
+                const audio = new Audio('/notification-sound.mp3'); // Add this file to public folder
+                audio.play().catch(e => console.log('Audio play failed:', e));
+
+                // Close notification after 5 seconds
+                setTimeout(() => notification.close(), 5000);
+            }
         });
 
+        // Remove chat-history listener as we're using localStorage
+
+        // Listen for chat cleared
         socket.on('chat-cleared', () => {
             console.log('Clearing chat...');
-            setMessages([]);
+            setMessages([]); // Clear messages when chat is cleared
         });
 
         return () => {
@@ -131,7 +99,7 @@ function App() {
             socket.off('receive-message');
             socket.off('chat-cleared');
         };
-    }, [name, showNotification]);
+    }, [name, notificationPermission]);
 
     const convertImageToBase64 = (file) => {
         return new Promise((resolve, reject) => {
@@ -164,6 +132,7 @@ function App() {
             };
             
             socket.emit('send-message', messageData);
+            // Removed the local message addition
             setMessage('');
             setImage(null);
         }
@@ -208,7 +177,6 @@ function App() {
                         <span className="message-time">{formatTime(msg.timestamp)}</span>
                     </div>
                 ))}
-                <div ref={messagesEndRef} />
             </div>
             <div className="chat-input">
                 <input

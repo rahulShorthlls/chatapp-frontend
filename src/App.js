@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import './App.css';
 
@@ -18,6 +18,11 @@ function App() {
     const [image, setImage] = useState(null);
     const [notificationPermission, setNotificationPermission] = useState(false);
     const [notificationEnabled, setNotificationEnabled] = useState(false);
+    const messagesEndRef = useRef(null);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
 
     const requestNotificationPermission = async () => {
         try {
@@ -66,6 +71,10 @@ function App() {
             setMessages((prev) => {
                 const newMessages = [...prev, data];
                 localStorage.setItem('chatMessages', JSON.stringify(newMessages));
+                // Only scroll to bottom on new messages, not when typing
+                if (data.name !== name) {
+                    setTimeout(scrollToBottom, 100);
+                }
                 return newMessages;
             });
 
@@ -177,6 +186,7 @@ function App() {
                         <span className="message-time">{formatTime(msg.timestamp)}</span>
                     </div>
                 ))}
+                <div ref={messagesEndRef} />
             </div>
             <div className="chat-input">
                 <input
